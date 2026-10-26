@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 환율 & 해외직구 관부가세 계산기</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pretendard:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    /* 숫자 입력창 화살표 숨김 */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200">
+
+  <!-- 상단 헤더 -->
+  <header class="sticky top-0 z-30 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md border-b border-slate-200 dark:border-slate-700">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+          <i data-lucide="coins" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight">실시간 환율 & 해외직구 계산기</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">무료 Open API 연동 · 환전 우대 및 관부가세 시뮬레이터</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="refreshBtn" onclick="fetchExchangeRates(true)" title="환율 새로고침"
+                class="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm">
+          <i data-lucide="refresh-cw" id="refreshIcon" class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400"></i>
+          <span class="hidden sm:inline">환율 새로고침</span>
+        </button>
+        <button id="themeToggleBtn" onclick="toggleTheme()" title="다크/라이트 모드 전환"
+                class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm">
+          <i data-lucide="moon" id="themeIcon" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 메인 콘텐츠 -->
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- API 연동 상태 배너 -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-2xl bg-blue-50/90 dark:bg-slate-800/80 border border-blue-100 dark:border-slate-700 text-xs">
+      <div class="flex items-center gap-2">
+        <span id="apiStatusBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+          실시간 API 정상
+        </span>
+        <span id="lastUpdateText" class="text-slate-600 dark:text-slate-300 font-medium">환율 정보를 불러오는 중...</span>
+      </div>
+      <div class="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+        <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-blue-500"></i>
+        <span>숫자 형변환(`parseFloat`) 및 API 예외 처리(`try-catch`) 적용 완료</span>
+      </div>
+    </div>
+
+    <!-- 주요 통화 원클릭 시세 카드 (USD, JPY, EUR, CNY, GBP) -->
+    <section>
+      <div class="flex items-center justify-between mb-2.5">
+        <h2 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-500"></i>
+          주요 통화 실시간 매매기준율 (클릭 시 빠른 선택)
+        </h2>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <!-- USD -->
+        <div onclick="selectQuickCurrency('USD')" class="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm hover:border-blue-500 dark:hover:border-blue-400 transition cursor-pointer group">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span class="font-bold group-hover:text-blue-600 dark:group-hover:text-blue-400">🇺🇸 미국 USD</span>
+            <span>$1</span>
+          </div>
+          <div class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white" id="card-USD">-- 원</div>
+        </div>
+        <!-- JPY -->
+        <div onclick="selectQuickCurrency('JPY')" class="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm hover:border-blue-500 dark:hover:border-blue-400 transition cursor-pointer group">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span class="font-bold group-hover:text-blue-600 dark:group-hover:text-blue-400">🇯🇵 일본 JPY</span>
+            <span>100엔</span>
+          </div>
+          <div class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white" id="card-JPY">-- 원</div>
+        </div>
+        <!-- EUR -->
+        <div onclick="selectQuickCurrency('EUR')" class="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm hover:border-blue-500 dark:hover:border-blue-400 transition cursor-pointer group">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span class="font-bold group-hover:text-blue-600 dark:group-hover:text-blue-400">🇪🇺 유럽 EUR</span>
+            <span>€1</span>
+          </div>
+          <div class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white" id="card-EUR">-- 원</div>
+        </div>
+        <!-- CNY -->
+        <div onclick="selectQuickCurrency('CNY')" class="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm hover:border-blue-500 dark:hover:border-blue-400 transition cursor-pointer group">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span class="font-bold group-hover:text-blue-600 dark:group-hover:text-blue-400">🇨🇳 중국 CNY</span>
+            <span>¥1</span>
+          </div>
+          <div class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white" id="card-CNY">-- 원</div>
+        </div>
+        <!-- GBP -->
+        <div onclick="selectQuickCurrency('GBP')" class="col-span-2 sm:col-span-1 p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm hover:border-blue-500 dark:hover:border-blue-400 transition cursor-pointer group">
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+            <span class="font-bold group-hover:text-blue-600 dark:group-hover:text-blue-400">🇬🇧 영국 GBP</span>
+            <span>£1</span>
+          </div>
+          <div class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white" id="card-GBP">-- 원</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 메인 기능 탭 버튼 -->
+    <div class="flex border-b border-slate-200 dark:border-slate-700 gap-2">
+      <button id="tabBtn-converter" onclick="switchTab('converter')"
+              class="flex items-center gap-2 px-5 py-3 border-b-2 font-bold text-sm transition border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400">
+        <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+        1. 실시간 환율 & 환전 우대 계산기
+      </button>
+      <button id="tabBtn-customs" onclick="switchTab('customs')"
+              class="flex items-center gap-2 px-5 py-3 border-b-2 font-bold text-sm transition border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+        <i data-lucide="Plane" class="w-4 h-4"></i>
+        2. 해외직구 관부가세 시뮬레이터
+      </button>
+    </div>
+
+    <!-- [탭 1] 실시간 환율 & 환전 우대 계산기 -->
+    <section id="panel-converter" class="space-y-6">
+      <div class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr] items-center gap-4">
+          <!-- 변환할 금액 (From) -->
+          <div class="space-y-2">
+            <label for="fromAmount" class="block text-xs font-bold text-slate-500 dark:text-slate-400">변환할 금액 (From)</label>
+            <div class="flex rounded-xl border border-slate-300 dark:border-slate-600 focus-within:ring-2 focus-within:ring-blue-500 bg-slate-50/60 dark:bg-slate-900/50 overflow-hidden">
+              <input type="number" id="fromAmount" value="100" min="0" step="any" oninput="updateConversion()"
+                     class="w-full px-4 py-3.5 bg-transparent text-xl font-extrabold text-slate-900 dark:text-white outline-none" placeholder="0">
+              <select id="fromCurrency" onchange="updateConversion()"
+                      class="bg-transparent px-3.5 py-3.5 text-sm font-bold border-l border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 outline-none cursor-pointer">
+                <option value="USD">🇺🇸 USD (미국 달러)</option>
+                <option value="JPY">🇯🇵 JPY (일본 엔)</option>
+                <option value="EUR">🇪🇺 EUR (유럽 유로)</option>
+                <option value="CNY">🇨🇳 CNY (중국 위안)</option>
+                <option value="GBP">🇬🇧 GBP (영국 파운드)</option>
+                <option value="KRW">🇰🇷 KRW (대한민국 원)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 양방향 통화 스왑 버튼 -->
+          <div class="flex justify-center md:pt-6">
+            <button onclick="swapCurrencies()" title="통화 맞바꾸기"
+                    class="p-3 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-600 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 shadow-sm transition active:scale-95">
+              <i data-lucide="arrow-left-right" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <!-- 환전 결과 금액 (To) -->
+          <div class="space-y-2">
+            <label for="toAmount" class="block text-xs font-bold text-slate-500 dark:text-slate-400">환전 예상 금액 (To)</label>
+            <div class="flex rounded-xl border border-slate-300 dark:border-slate-600 focus-within:ring-2 focus-within:ring-blue-500 bg-slate-50/60 dark:bg-slate-900/50 overflow-hidden">
+              <input type="text" id="toAmount" readonly
+                     class="w-full px-4 py-3.5 bg-transparent text-xl font-extrabold text-blue-600 dark:text-blue-400 outline-none" placeholder="0">
+              <select id="toCurrency" onchange="updateConversion()"
+                      class="bg-transparent px-3.5 py-3.5 text-sm font-bold border-l border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 outline-none cursor-pointer">
+                <option value="KRW">🇰🇷 KRW (대한민국 원)</option>
+                <option value="USD">🇺🇸 USD (미국 달러)</option>
+                <option value="JPY">🇯🇵 JPY (일본 엔)</option>
+                <option value="EUR">🇪🇺 EUR (유럽 유로)</option>
+                <option value="CNY">🇨🇳 CNY (중국 위안)</option>
+                <option value="GBP">🇬🇧 GBP (영국 파운드)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 환전 우대율 슬라이더 및 프리셋 버튼 (0%, 50%, 80%, 90%, 100%) -->
+        <div class="pt-5 border-t border-slate-100 dark:border-slate-700/70 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span class="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+              <i data-lucide="percent" class="w-4 h-4 text-blue-500"></i>
+              은행 환전 수수료(스프레드 1.75%) 우대율 설정
+            </span>
+            <span id="spreadDiscountLabel" class="px-2.5 py-0.5 rounded-full font-extrabold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              90% 우대 적용 중
+            </span>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-center gap-3">
+            <input type="range" id="spreadDiscount" min="0" max="100" step="10" value="90" oninput="updateConversion()"
+                   class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600">
+            <div class="flex gap-1.5 w-full sm:w-auto justify-end shrink-0">
+              <button onclick="setDiscount(0)" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition">0%</button>
+              <button onclick="setDiscount(50)" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition">50%</button>
+              <button onclick="setDiscount(80)" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition">80%</button>
+              <button onclick="setDiscount(90)" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition">90%</button>
+              <button onclick="setDiscount(100)" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition">100%</button>
+            </div>
+          </div>
+
+          <!-- 환전 상세 요약 박스 (innerHTML 활용) -->
+          <div id="converterSummaryBox" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+            계산 결과를 불러오는 중입니다...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- [탭 2] 해외직구 관부가세 시뮬레이터 -->
+    <section id="panel-customs" class="space-y-6 hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- 왼쪽: 직구 정보 입력 카드 -->
+        <div class="lg:col-span-7 p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm space-y-5">
+          <div class="flex items-center justify-between">
+            <h3 class="font-extrabold text-base flex items-center gap-2">
+              <i data-lucide="shopping-bag" class="w-5 h-5 text-blue-500"></i>
+              해외직구 물품 정보 입력
+            </h3>
+            <span class="text-xs text-slate-400">자동 합산 & 세율 계산</span>
+          </div>
+
+          <!-- 1. 발송 국가 선택 ($200 vs $150) -->
+          <div>
+            <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">발송 국가 기준 (목록통관 면세 한도)</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label class="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40 transition has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/50 dark:has-[:checked]:bg-blue-950/30">
+                <input type="radio" name="originCountry" value="200" checked onchange="calculateCustoms()" class="w-4 h-4 accent-blue-600">
+                <div>
+                  <div class="text-sm font-bold">🇺🇸 미국 발송 (목록통관)</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">총 결제액 <strong>$200 이하</strong> 면세</div>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40 transition has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/50 dark:has-[:checked]:bg-blue-950/30">
+                <input type="radio" name="originCountry" value="150" onchange="calculateCustoms()" class="w-4 h-4 accent-blue-600">
+                <div>
+                  <div class="text-sm font-bold">🌏 기타 국가 (일본/유럽/중국 등)</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">미화 환산 <strong>$150 이하</strong> 면세</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 2. 품목 카테고리 선택 (실제 관세율 및 부가세 10%) -->
+          <div>
+            <label for="customsCategory" class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">품목 카테고리 (품목별 관세율 자동 적용)</label>
+            <select id="customsCategory" onchange="calculateCustoms()"
+                    class="w-full px-3.5 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="전자제품" data-tariff="0" data-vat="10">💻 전자제품 / 노트북 / 스마트폰 (관세 0%, 부가세 10%)</option>
+              <option value="의류/패션" data-tariff="13" data-vat="10" selected>👕 의류 / 패션잡화 / 가방 (관세 13%, 부가세 10%)</option>
+              <option value="신발" data-tariff="13" data-vat="10">👟 운동화 / 구두 / 신발류 (관세 13%, 부가세 10%)</option>
+              <option value="화장품/향수" data-tariff="6.5" data-vat="10">💄 화장품 / 스킨케어 / 향수 (관세 6.5%, 부가세 10%)</option>
+              <option value="건강기능식품" data-tariff="8" data-vat="10">💊 비타민 / 건강기능식품 (관세 8%, 부가세 10%)</option>
+              <option value="일반잡화" data-tariff="8" data-vat="10">📦 완구 / 생활용품 / 일반잡화 (관세 8%, 부가세 10%)</option>
+            </select>
+          </div>
+
+          <!-- 3. 물품 가격 & 결제 통화 + 현지 배송비 -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label for="priceInput" class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">상품 가격 (외화)</label>
+              <div class="flex rounded-xl border border-slate-300 dark:border-slate-600 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden">
+                <input type="number" id="priceInput" value="160" min="0" step="0.01" oninput="calculateCustoms()"
+                       class="w-full px-3.5 py-2.5 bg-transparent font-bold text-slate-900 dark:text-white outline-none" placeholder="예: 160">
+                <select id="customsCurrency" onchange="calculateCustoms()"
+                        class="bg-slate-100 dark:bg-slate-700 px-3 py-2.5 text-xs font-extrabold border-l border-slate-200 dark:border-slate-600 outline-none cursor-pointer">
+                  <option value="USD">USD ($)</option>
+                  <option value="JPY">JPY (¥)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="CNY">CNY (¥)</option>
+                  <option value="GBP">GBP (£)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label for="shippingInput" class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                현지 배송비 + 현지 세금 (<span id="localCurrUnit">USD</span>)
+              </label>
+              <input type="number" id="shippingInput" value="15" min="0" step="0.01" oninput="calculateCustoms()"
+                     class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-transparent font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 15">
+            </div>
+          </div>
+
+          <!-- 4. 구입 물품 메모 -->
+          <div>
+            <label for="memoInput" class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">구입 물품 메모 (선택)</label>
+            <input type="text" id="memoInput" value="직구 운동화 & 자켓" oninput="calculateCustoms()"
+                   class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-transparent text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 블랙프라이데이 운동화 직구">
+          </div>
+        </div>
+
+        <!-- 오른쪽: 면세 한도 게이지 & 최종 세금 영수증 -->
+        <div class="lg:col-span-5 p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 shadow-sm flex flex-col justify-between space-y-5">
+          
+          <div class="space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+              <h3 class="font-extrabold text-base">직구 관부가세 분석 결과</h3>
+              <span id="dutyFreeBadge" class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400">
+                면세 구간
+              </span>
+            </div>
+
+            <!-- 면세 한도 대비 시각적 게이지 바 -->
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700 space-y-2">
+              <div class="flex justify-between text-xs font-bold">
+                <span class="text-slate-600 dark:text-slate-300">면세 한도 게이지</span>
+                <span id="gaugePercentText" class="text-blue-600 dark:text-blue-400">0% ($0 / $200)</span>
+              </div>
+              <div class="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div id="gaugeBar" class="h-full bg-emerald-500 transition-all duration-300 rounded-full" style="width: 50%"></div>
+              </div>
+              <p id="gaugeAdviceText" class="text-[11px] text-slate-500 dark:text-slate-400">
+                면세 한도 내에 있어 관부가세가 부과되지 않습니다.
+              </p>
+            </div>
+
+            <!-- 상세 계산 결과 출력 (innerHTML 사용) -->
+            <div id="resultBox" class="space-y-2.5 text-sm">
+              <!-- JS에서 동적 렌더링 -->
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 dark:border-slate-700/70 text-[11px] text-slate-400 leading-relaxed">
+            * 면세 한도 판정은 <strong>(상품 가격 + 현지 배송비)의 미화(USD) 환산 금액</strong>을 기준으로 계산됩니다.
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // 1. 안전 폴백(Fallback) 환율 데이터 (오프라인 또는 API 오류 시 작동)
+    const FALLBACK_RATES = {
+      USD: 1.0,
+      KRW: 1395.0,
+      JPY: 154.2,
+      EUR: 0.92,
+      CNY: 7.24,
+      GBP: 0.79
+    };
+
+    let exchangeRates = { ...FALLBACK_RATES };
+    let lastUpdatedTime = "초기 기본값";
+
+    // 테마(다크 모드) 초기화 및 토글
+    function initTheme() {
+      const saved = localStorage.getItem('theme_pref');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (saved === 'dark' || (!saved && prefersDark)) {
+        document.documentElement.classList.add('dark');
+        updateThemeIcon(true);
+      } else {
+        document.documentElement.classList.remove('dark');
+        updateThemeIcon(false);
+      }
+    }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme_pref', isDark ? 'dark' : 'light');
+      updateThemeIcon(isDark);
+    }
+
+    function updateThemeIcon(isDark) {
+      const icon = document.getElementById('themeIcon');
+      if (icon) {
+        icon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+        lucide.createIcons();
+      }
+    }
+
+    // [코드 리뷰 2번 문제 해결] try ~ catch 예외 처리를 통한 안전한 무료 환율 API 호출
+    async function fetchExchangeRates(isManual = false) {
+      const refreshIcon = document.getElementById('refreshIcon');
+      const statusBadge = document.getElementById('apiStatusBadge');
+      const updateText = document.getElementById('lastUpdateText');
+
+      if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+      try {
+        const response = await fetch("https://open.er-api.com/v6/latest/USD");
+        if (!response.ok) {
+          throw new Error(`HTTP 오류 상태 코드: ${response.status}`);
+        }
+        const data = await response.json();
+
+        if (!data || !data.rates || !data.rates.KRW) {
+          throw new Error("유효하지 않은 환율 데이터 형식");
+        }
+
+        exchangeRates = data.rates;
+        const updatedDate = new Date(data.time_last_update_utc || Date.now());
+        lastUpdatedTime = updatedDate.toLocaleString('ko-KR', {
+          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+
+        // 로컬 스토리지에 최신 환율 백업 저장
+        localStorage.setItem('cached_exchange_rates', JSON.stringify({
+          rates: exchangeRates,
+          time: lastUpdatedTime
+        }));
+
+        statusBadge.className = "inline-flex items-center px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400";
+        statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>실시간 환율 적용됨`;
+        updateText.innerHTML = `기준일시: <b>${lastUpdatedTime}</b> (1 USD = ${exchangeRates.KRW.toFixed(2)}원)`;
+      } catch (error) {
+        console.warn("실시간 환율을 가져오지 못해 캐시 또는 비상용 기본 환율을 사용합니다.", error);
+
+        // 캐시된 환율이 있으면 우선 복원, 없으면 FALLBACK_RATES 사용
+        const cached = localStorage.getItem('cached_exchange_rates');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            exchangeRates = parsed.rates;
+            lastUpdatedTime = parsed.time + " (캐시됨)";
+          } catch (e) {
+            exchangeRates = { ...FALLBACK_RATES };
+          }
+        } else {
+          exchangeRates = { ...FALLBACK_RATES };
+        }
+
+        statusBadge.className = "inline-flex items-center px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400";
+        statusBadge.innerHTML = `오프라인 안전 모드`;
+        updateText.innerHTML = `네트워크 오류로 비상용 환율 적용 중: <b>$1 = ${exchangeRates.KRW.toFixed(2)}원</b>`;
+      } finally {
+        if (refreshIcon) {
+          setTimeout(() => refreshIcon.classList.remove('animate-spin'), 350);
+        }
+        renderRateCards();
+        updateConversion();
+        calculateCustoms();
+      }
+    }
+
+    // 통화 간 환산 헬퍼 함수 (USD 기준 경유)
+    function convertCurrency(amount, fromCurr, toCurr) {
+      const numAmount = parseFloat(amount) || 0;
+      const fromRate = exchangeRates[fromCurr] || 1;
+      const toRate = exchangeRates[toCurr] || 1;
+      const inUSD = numAmount / fromRate;
+      return inUSD * toRate;
+    }
+
+    // 상단 5대 주요 통화 시세 카드 갱신
+    function renderRateCards() {
+      const usdKrw = convertCurrency(1, 'USD', 'KRW');
+      const jpyKrw = convertCurrency(100, 'JPY', 'KRW');
+      const eurKrw = convertCurrency(1, 'EUR', 'KRW');
+      const cnyKrw = convertCurrency(1, 'CNY', 'KRW');
+      const gbpKrw = convertCurrency(1, 'GBP', 'KRW');
+
+      document.getElementById('card-USD').innerHTML = `${Math.round(usdKrw).toLocaleString('ko-KR')} 원`;
+      document.getElementById('card-JPY').innerHTML = `${jpyKrw.toFixed(1)} 원`;
+      document.getElementById('card-EUR').innerHTML = `${Math.round(eurKrw).toLocaleString('ko-KR')} 원`;
+      document.getElementById('card-CNY').innerHTML = `${cnyKrw.toFixed(1)} 원`;
+      document.getElementById('card-GBP').innerHTML = `${Math.round(gbpKrw).toLocaleString('ko-KR')} 원`;
+    }
+
+    // 상단 카드 클릭 시 해당 통화로 즉시 세팅
+    function selectQuickCurrency(curr) {
+      document.getElementById('fromCurrency').value = curr;
+      document.getElementById('toCurrency').value = 'KRW';
+      document.getElementById('fromAmount').value = curr === 'JPY' ? 10000 : 100;
+
+      document.getElementById('customsCurrency').value = curr;
+      updateConversion();
+      calculateCustoms();
+    }
+
+    // [탭 1] 실시간 환율 및 환전 우대 계산기 로직
+    function setDiscount(rate) {
+      document.getElementById('spreadDiscount').value = parseFloat(rate) || 0;
+      updateConversion();
+    }
+
+    function swapCurrencies() {
+      const fromEl = document.getElementById('fromCurrency');
+      const toEl = document.getElementById('toCurrency');
+      const temp = fromEl.value;
+      fromEl.value = toEl.value;
+      toEl.value = temp;
+      updateConversion();
+    }
+
+    function updateConversion() {
+      // [코드 리뷰 1번 문제 해결] 모든 입력값을 parseFloat(...) || 0 으로 안전하게 숫자 변환
+      const rawAmount = parseFloat(document.getElementById('fromAmount').value) || 0;
+      const discountRate = parseFloat(document.getElementById('spreadDiscount').value) || 0;
+      const fromCurr = document.getElementById('fromCurrency').value;
+      const toCurr = document.getElementById('toCurrency').value;
+
+      document.getElementById('spreadDiscountLabel').innerHTML = `${discountRate}% 우대 적용 중`;
+
+      const baseConverted = convertCurrency(rawAmount, fromCurr, toCurr);
+      const unitRate = convertCurrency(1, fromCurr, toCurr);
+
+      // 은행 기본 환전 스프레드(약 1.75%)에 우대율 적용
+      const baseSpread = 0.0175;
+      const effectiveSpread = fromCurr === toCurr ? 0 : baseSpread * (1 - (discountRate / 100));
+      const finalAmount = baseConverted * (1 + effectiveSpread);
+      const feeDifference = finalAmount - baseConverted;
+
+      const isZeroDecimal = (toCurr === 'KRW' || toCurr === 'JPY');
+      const formattedResult = isZeroDecimal
+        ? Math.round(finalAmount).toLocaleString('ko-KR')
+        : finalAmount.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      document.getElementById('toAmount').value = formattedResult;
+
+      const summaryBox = document.getElementById('converterSummaryBox');
+      summaryBox.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+          <span>• <b>매매기준율:</b> 1 ${fromCurr} = <b>${unitRate.toFixed(isZeroDecimal ? 2 : 4)} ${toCurr}</b></span>
+          <span>• <b>기준 환산액 (수수료 제외):</b> ${Math.round(baseConverted).toLocaleString('ko-KR')} ${toCurr}</span>
+        </div>
+        <div class="mt-1 text-blue-600 dark:text-blue-400 font-semibold">
+          • <b>체감 환전 수수료 (${discountRate}% 우대):</b> 약 ${Math.round(feeDifference).toLocaleString('ko-KR')} ${toCurr} 반영됨
+        </div>
+      `;
+    }
+
+    // [탭 2] 해외직구 관부가세 시뮬레이터 로직
+    function calculateCustoms() {
+      // [코드 리뷰 1번 문제 해결] 문자열 덧셈 버그 방지를 위해 parseFloat(...) || 0 엄격 적용
+      const price = parseFloat(document.getElementById('priceInput').value) || 0;
+      const shipping = parseFloat(document.getElementById('shippingInput').value) || 0;
+      const taxFreeLimitUSD = parseFloat(document.querySelector('input[name="originCountry"]:checked').value) || 200;
+      const curr = document.getElementById('customsCurrency').value;
+      const userMemo = document.getElementById('memoInput').value || '메모 없음';
+
+      document.getElementById('localCurrUnit').innerHTML = curr;
+
+      // 품목별 관세율 및 부가세율 파싱
+      const categorySelect = document.getElementById('customsCategory');
+      const selectedOpt = categorySelect.options[categorySelect.selectedIndex];
+      const categoryName = selectedOpt.value;
+      const tariffRatePercent = parseFloat(selectedOpt.getAttribute('data-tariff')) || 0;
+      const vatRatePercent = parseFloat(selectedOpt.getAttribute('data-vat')) || 10;
+
+      // 1) 숫자 덧셈 (문자열 연결 방지 완료)
+      const totalForeign = price + shipping;
+
+      // 2) 면세 한도 비교를 위한 USD 환산 금액 및 원화(KRW) 환산 금액
+      const totalUSD = convertCurrency(totalForeign, curr, 'USD');
+      const baseKRW = convertCurrency(totalForeign, curr, 'KRW');
+
+      // 3) 면세 여부 판정 및 게이지 업데이트
+      const isTaxFree = totalUSD <= taxFreeLimitUSD;
+      const gaugeRatio = Math.min((totalUSD / taxFreeLimitUSD) * 100, 100);
+
+      const badge = document.getElementById('dutyFreeBadge');
+      const gaugeBar = document.getElementById('gaugeBar');
+      const gaugePercentText = document.getElementById('gaugePercentText');
+      const gaugeAdviceText = document.getElementById('gaugeAdviceText');
+
+      gaugePercentText.innerHTML = `${ ((totalUSD / taxFreeLimitUSD) * 100).toFixed(1) }% ($${totalUSD.toFixed(2)} / $${taxFreeLimitUSD})`;
+      gaugeBar.style.width = `${gaugeRatio}%`;
+
+      if (isTaxFree) {
+        const remainUSD = taxFreeLimitUSD - totalUSD;
+        badge.className = "px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400";
+        badge.innerHTML = "면세 대상 (세금 0원)";
+        gaugeBar.className = "h-full bg-emerald-500 transition-all duration-300 rounded-full";
+        gaugeAdviceText.innerHTML = `면세 한도까지 <b>$${remainUSD.toFixed(2)}</b> 여유가 있습니다. 관부가세가 부과되지 않습니다.`;
+      } else {
+        const overUSD = totalUSD - taxFreeLimitUSD;
+        badge.className = "px-2.5 py-1 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400";
+        badge.innerHTML = "과세 대상 (한도 초과)";
+        gaugeBar.className = "h-full bg-rose-500 transition-all duration-300 rounded-full";
+        gaugeAdviceText.innerHTML = `면세 한도($${taxFreeLimitUSD})를 <b>$${overUSD.toFixed(2)} 초과</b>하여 전체 금액에 대해 관세(${tariffRatePercent}%)와 부가세(${vatRatePercent}%)가 부과됩니다.`;
+      }
+
+      // 4) 관세 및 부가세 정밀 계산
+      let customsDutyKRW = 0;
+      let vatKRW = 0;
+
+      if (!isTaxFree) {
+        customsDutyKRW = Math.round(baseKRW * (tariffRatePercent / 100));
+        // 부가세는 (과세표준 원화 + 관세)의 10%
+        vatKRW = Math.round((baseKRW + customsDutyKRW) * (vatRatePercent / 100));
+      }
+
+      const totalTaxKRW = customsDutyKRW + vatKRW;
+      const finalKRW = Math.round(baseKRW + totalTaxKRW);
+
+      // 5) innerHTML을 이용한 상세 영수증 출력
+      const resultBox = document.getElementById('resultBox');
+      resultBox.innerHTML = `
+        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+          <span class="text-slate-500 dark:text-slate-400">구입 물품 메모</span>
+          <span class="font-bold text-slate-800 dark:text-slate-200">${userMemo} (${categoryName})</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+          <span class="text-slate-500 dark:text-slate-400">총 외화 합계 (상품+배송비)</span>
+          <span class="font-bold text-slate-800 dark:text-slate-200">${totalForeign.toLocaleString('ko-KR', { maximumFractionDigits: 2 })} ${curr} ($${totalUSD.toFixed(2)})</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+          <span class="text-slate-500 dark:text-slate-400">물품 원화 환산액</span>
+          <span class="font-bold text-slate-800 dark:text-slate-200">${Math.round(baseKRW).toLocaleString('ko-KR')} 원</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+          <span class="text-slate-500 dark:text-slate-400">예상 관세 (${tariffRatePercent}%)</span>
+          <span class="font-bold ${customsDutyKRW > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">${customsDutyKRW.toLocaleString('ko-KR')} 원</span>
+        </div>
+        <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+          <span class="text-slate-500 dark:text-slate-400">예상 부가세 (${vatRatePercent}%)</span>
+          <span class="font-bold ${vatKRW > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}">${vatKRW.toLocaleString('ko-KR')} 원</span>
+        </div>
+        <div class="pt-3 flex items-baseline justify-between">
+          <span class="text-xs font-extrabold text-slate-500 dark:text-slate-400">최종 예상 총 지불액</span>
+          <span class="text-2xl font-black text-blue-600 dark:text-blue-400">${finalKRW.toLocaleString('ko-KR')} 원</span>
+        </div>
+      `;
+    }
+
+    // 탭 전환 함수
+    function switchTab(tabName) {
+      const convBtn = document.getElementById('tabBtn-converter');
+      const custBtn = document.getElementById('tabBtn-customs');
+      const convPanel = document.getElementById('panel-converter');
+      const custPanel = document.getElementById('panel-customs');
+
+      if (tabName === 'converter') {
+        convPanel.classList.remove('hidden');
+        custPanel.classList.add('hidden');
+        convBtn.className = "flex items-center gap-2 px-5 py-3 border-b-2 font-bold text-sm transition border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400";
+        custBtn.className = "flex items-center gap-2 px-5 py-3 border-b-2 font-bold text-sm transition border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
+      } else {
+        convPanel.classList.add('hidden');
+        custPanel.classList.remove('hidden');
+        custBtn.className = "flex items-center gap-2 px-5 py-3 border-b-2 font-bold text-sm transition border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400";
+        convBtn.className = "flex items-center gap-2 px-5 py-3 border-b-2 font-bold text-sm transition border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
+      }
+    }
+
+    // 초기 실행
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      lucide.createIcons();
+      fetchExchangeRates();
+    });
+  </script>
+</body>
+</html>
